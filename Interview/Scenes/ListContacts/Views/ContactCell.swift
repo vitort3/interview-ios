@@ -52,23 +52,41 @@ class ContactCell: UITableViewCell {
         fullnameLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor).isActive = true
     }
     
-    func setupCell(with contact:Contact) {
+    func setupCell(with contact: Contact) {
         self.fullnameLabel.text = contact.name
         self.contactImage.image = nil
-        
-        guard let url = URL(string: contact.photoURL) else {return}
-        
-        imageLoadTask = Task {
-            if let (data, _) = try? await URLSession.shared.data(from: url),
-               let image = UIImage(data: data) {
-                    await MainActor.run {
-                        self.contactImage.image = image
-                    }
-            }
+        self.contactImage.backgroundColor = .lightGray
+
+        guard let url = URL(string: contact.photoURL) else {
+            self.contactImage.backgroundColor = nil
+            self.contactImage.image = UIImage(systemName: "exclamationmark.triangle")
+            return
         }
         
+        imageLoadTask?.cancel()
+        imageLoadTask = Task { [weak self] in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let image = UIImage(data: data) {
+                    await MainActor.run {
+                        self?.contactImage.backgroundColor = nil
+                        self?.contactImage.image = image
+                    }
+                } else {
+                    await MainActor.run {
+                        self?.contactImage.backgroundColor = nil
+                        self?.contactImage.image = UIImage(systemName: "exclamationmark.triangle")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self?.contactImage.backgroundColor = nil
+                    self?.contactImage.image = UIImage(systemName: "exclamationmark.triangle")
+                }
+            }
+        }
     }
-    
+        
     override func prepareForReuse() {
         super.prepareForReuse()
         self.imageLoadTask?.cancel()
